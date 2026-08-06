@@ -82,7 +82,34 @@ def run_analysis(
                 total_columns=len(fe.df.columns),
             )
             report._engineered_df = fe.df
-            progress.update(step, completed=1)
+
+        if config.modules.automl:
+            if config.automl.target is None:
+                report.warnings.append(
+                    "AutoML and explainability skipped: no target column provided. "
+                    "Pass --target <column> to enable model training."
+                )
+            else:
+                step = progress.add_task("AutoML", total=1)
+                from datapulse.modules.automl import train_leaderboard
+
+                df_for_automl = report._engineered_df if report._engineered_df is not None else df
+                report.automl = train_leaderboard(
+                    df_for_automl,
+                    config.automl.target,
+                    config=config.automl,
+                    progress_cb=lambda name, i, n: progress.update(
+                        step, description=f"AutoML [{i}/{n}] {name}"
+                    ),
+                )
+                progress.update(step, completed=1)
+
+                if config.modules.explainability:
+                    step = progress.add_task("Explainability", total=1)
+                    from datapulse.modules.explainability import explain_best_model
+
+                    report.explainability = explain_best_model(report.automl)
+                    progress.update(step, completed=1)
 
     report.metadata.duration_s = round(time.monotonic() - start, 3)
     return report

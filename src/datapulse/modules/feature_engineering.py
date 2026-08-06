@@ -84,9 +84,10 @@ def extract_datetime_features(df: pl.DataFrame) -> tuple[pl.DataFrame, List[str]
     return df, new_cols
 
 
-def scale_numeric(df: pl.DataFrame, method: str = "robust") -> tuple[pl.DataFrame, List[str]]:
+def scale_numeric(df: pl.DataFrame, method: str = "robust", exclude: List[str] | None = None) -> tuple[pl.DataFrame, List[str]]:
     """Standard/Robust scale numeric columns (sklearn) producing __scaled columns."""
-    numeric_cols = [name for name, dtype in df.schema.items() if _is_numeric(dtype)]
+    exclude = exclude or []
+    numeric_cols = [name for name, dtype in df.schema.items() if _is_numeric(dtype) and name not in exclude]
     clean = [c for c in numeric_cols if df[c].null_count() == 0]
     if not clean:
         return df, []
@@ -106,9 +107,10 @@ def scale_numeric(df: pl.DataFrame, method: str = "robust") -> tuple[pl.DataFram
     return df, new_cols
 
 
-def add_interactions(df: pl.DataFrame, max_pairs: int = 100) -> tuple[pl.DataFrame, List[str]]:
+def add_interactions(df: pl.DataFrame, max_pairs: int = 100, exclude: List[str] | None = None) -> tuple[pl.DataFrame, List[str]]:
     """Add pairwise numeric interactions for the most variable columns."""
-    numeric_cols = [name for name, dtype in df.schema.items() if _is_numeric(dtype)]
+    exclude = exclude or []
+    numeric_cols = [name for name, dtype in df.schema.items() if _is_numeric(dtype) and name not in exclude]
     clean = [c for c in numeric_cols if df[c].null_count() == 0 and c.endswith("__scaled")]
     if len(clean) < 2:
         return df, []
@@ -153,6 +155,12 @@ def run_feature_engineering(
     config = config or FeatureEngineeringConfig()
     engineered: List[str] = []
     dropped: List[str] = []
+    target_cols = [target] if target else []
+    # engineered columns derived from the target would leak it into the model
+    leak_prefixes = tuple(f"{target}__" for target in target_cols)
+
+    def _is_leak(col: str) -> bool:
+        return col in target_cols or col.startswith(leak_prefixes)
 
     if config.datetime_parsing:
         df, cols = parse_datetimes(df)
@@ -165,12 +173,18 @@ def run_feature_engineering(
         engineered += cols
 
     if config.scaling != "none":
-        df, cols = scale_numeric(df, method=config.scaling)
-        engineered += cols
+        df, cols = scale_numeric(df, method=config.scaling, exclude=target_cols)
+        engineered += [c for c in cols if not _is_leak(c)]
 
     if config.interactions:
-        df, cols = add_interactions(df)
-        engineered += cols
+        df, cols = add_interactions(df, exclude=target_cols)
+        engineered += [c for c in cols if not _is_leak(c)]
+
+    # drop engineered columns derived from the target to prevent leakage
+    leak_cols = [c for c in df.columns if _is_leak(c) and c not in target_cols]
+    if leak_cols:
+        df = df.drop(leak_cols)
+        dropped += leak_cols
 
     # cap total columns to avoid explosion
     cap = config.max_features

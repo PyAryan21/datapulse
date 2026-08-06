@@ -59,6 +59,8 @@ def analyze(
     for k, v in summary.items():
         table.add_row(k, str(v))
     console.print(table)
+    for w in report.warnings:
+        console.print(f"[yellow]warning: {w}[/]")
 
     # export
     from datapulse.exporters.html_exporter import export_html

@@ -67,6 +67,12 @@ class AutoMLResult(BaseModel):
     best_model_name: Optional[str] = None
     train_time_s: Optional[float] = None
 
+    # Internal (not serialized): fitted pipeline + data for explainability
+    _best_pipeline: Any = PrivateAttr(default=None)
+    _X: Any = PrivateAttr(default=None)
+    _y: Any = PrivateAttr(default=None)
+    _features: Any = PrivateAttr(default=None)
+
 
 class ExplainabilityResult(BaseModel):
     method: str = ""
@@ -108,6 +114,7 @@ class Report(BaseModel):
     explainability: Optional[ExplainabilityResult] = None
     timeseries: Optional[TimeSeriesResult] = None
     text: Optional[TextResult] = None
+    warnings: List[str] = Field(default_factory=list)
     charts: Dict[str, Any] = Field(default_factory=dict, description="Serialized Plotly figures")
 
     # Internal: engineered DataFrame used by downstream modules (not serialized)

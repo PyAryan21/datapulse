@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class ColumnProfile(BaseModel):
@@ -109,6 +109,9 @@ class Report(BaseModel):
     timeseries: Optional[TimeSeriesResult] = None
     text: Optional[TextResult] = None
     charts: Dict[str, Any] = Field(default_factory=dict, description="Serialized Plotly figures")
+
+    # Internal: engineered DataFrame used by downstream modules (not serialized)
+    _engineered_df: Any = PrivateAttr(default=None)
 
     # --- exporters -------------------------------------------------------
     def to_dict(self) -> Dict[str, Any]:

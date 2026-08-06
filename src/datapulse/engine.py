@@ -12,8 +12,15 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from datapulse import __version__
 from datapulse.config import AnalysisConfig
 from datapulse.ingest import load_lazyframe, sample_for_viz
+from datapulse.modules.feature_engineering import run_feature_engineering
 from datapulse.modules.profiling import correlation_matrix, profile_dataset
-from datapulse.report import DatasetProfile, Report, RunMetadata
+from datapulse.modules.quality import analyze_quality
+from datapulse.report import (
+    DatasetProfile,
+    FeatureEngineeringReport,
+    Report,
+    RunMetadata,
+)
 
 
 def run_analysis(
@@ -59,6 +66,23 @@ def run_analysis(
             "spearman": spearman,
         }
         progress.update(step, completed=1)
+
+        if config.modules.quality:
+            step = progress.add_task("Quality checks", total=1)
+            report.quality = analyze_quality(df, profile=report.profile)
+            progress.update(step, completed=1)
+
+        if config.modules.feature_engineering:
+            step = progress.add_task("Feature engineering", total=1)
+            fe = run_feature_engineering(df, config.feature_engineering, target=config.automl.target)
+            report.feature_engineering = FeatureEngineeringReport(
+                original_columns=len(df.columns),
+                engineered_columns=fe.engineered_columns,
+                dropped_columns=fe.dropped_columns,
+                total_columns=len(fe.df.columns),
+            )
+            report._engineered_df = fe.df
+            progress.update(step, completed=1)
 
     report.metadata.duration_s = round(time.monotonic() - start, 3)
     return report

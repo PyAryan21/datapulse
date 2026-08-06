@@ -111,6 +111,20 @@ def run_analysis(
                     report.explainability = explain_best_model(report.automl)
                     progress.update(step, completed=1)
 
+        if config.modules.profiling and config.visualization.sampling > 0:
+            step = progress.add_task("Building charts", total=1)
+            from datapulse.viz.charts import build_charts
+
+            report.charts = build_charts(
+                df,
+                report.profile,
+                report.quality,
+                report.automl,
+                report.explainability,
+                max_points=config.visualization.sampling,
+            )
+            progress.update(step, completed=1)
+
     report.metadata.duration_s = round(time.monotonic() - start, 3)
     return report
 
